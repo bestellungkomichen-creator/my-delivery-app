@@ -22,17 +22,16 @@ if api_key:
     if uploaded_file is not None:
         # 顯示上傳的照片
         image = Image.open(uploaded_file)
-        # 更新：使用最新的 use_container_width 參數
         st.image(image, caption="你上傳的包裹照片", use_container_width=True)
 
         # 點擊按鈕開始辨識
         if st.button("🚀 開始自動提取資料"):
             with st.spinner("AI 正在努力辨識圖片中，請稍候..."):
                 try:
-                    # 使用 Gemini 1.5 Flash 模型 (速度快、支援圖片)
-                    model = genai.GenerativeModel('gemini-1.5-flash')
+                    # 【修復重點】將模型名稱加上 -latest，確保雲端能正確讀取
+                    model = genai.GenerativeModel('gemini-1.5-flash-latest')
                     
-                    # 給 AI 的指令 (因為啟用了 JSON 模式，指令可以更簡潔)
+                    # 給 AI 的指令
                     prompt = """
                     請從這張物流標籤圖片中提取以下資訊，並回傳指定的 JSON 格式：
                     {
@@ -44,21 +43,19 @@ if api_key:
                     如果圖片中找不到某項資訊，請填寫 "未找到"。
                     """
                     
-                    # 更新：呼叫 AI 進行辨識，並透過設定強制要求回傳標準 JSON 格式
+                    # 呼叫 AI 進行辨識
                     response = model.generate_content(
                         [prompt, image],
                         generation_config={"response_mime_type": "application/json"}
                     )
                     
-                    # AI 現在保證會回傳純 JSON 格式，可直接解析
+                    # 轉換 JSON 格式
                     data = json.loads(response.text)
                     
                     st.success("✅ 辨識完成！")
                     
-                    # 顯示成表格，方便使用者直接複製
+                    # 顯示成表格
                     df = pd.DataFrame([data])
-                    
-                    # 重新排列欄位，符合你的 Google Sheets 順序習慣
                     df = df[['郵寄公司', '追蹤碼', '寄貨人', '寄貨地址']]
                     
                     st.dataframe(df, use_container_width=True)
