@@ -83,20 +83,27 @@ if uploaded_file is not None:
                         
                     data = json.loads(text.strip())
                     
-                    # 1. 將新資料加入網頁畫面下方
-                    new_row = pd.DataFrame([data])
-                    new_row = new_row[['郵寄公司', '追蹤碼', '寄貨人', '寄貨地址']]
-                    st.session_state.scanned_data = pd.concat([st.session_state.scanned_data, new_row], ignore_index=True)
-                    
-                    # 2. 將新資料即時發送到 Google Sheets！
-                    if webhook_url:
-                        res = requests.post(webhook_url, json=data)
-                        if res.status_code == 200:
-                            st.success(f"✅ 辨識成功！資料已同步寫入你的 Google 表格！")
-                        else:
-                            st.warning(f"✅ 辨識成功，但寫入 Google 表格失敗，請稍後下載 CSV 手動補上。")
+                    # ==========================================
+                    # 【新增防呆機制】檢查是不是無關的照片
+                    # 如果連最重要的「追蹤碼」和「郵寄公司」都找不到，就判定為無效照片
+                    # ==========================================
+                    if data.get("追蹤碼", "未找到") == "未找到" and data.get("郵寄公司", "未找到") == "未找到":
+                        st.warning("⚠️ 圖片中找不到任何物流單資訊。請確認這是一張清晰的包裹照片！(此筆無效資料已攔截，不會寫入表格)")
                     else:
-                        st.success(f"✅ 辨識成功！(尚未設定 Google Sheets 同步)")
+                        # 通過檢查，將新資料加入網頁畫面下方
+                        new_row = pd.DataFrame([data])
+                        new_row = new_row[['郵寄公司', '追蹤碼', '寄貨人', '寄貨地址']]
+                        st.session_state.scanned_data = pd.concat([st.session_state.scanned_data, new_row], ignore_index=True)
+                        
+                        # 將新資料即時發送到 Google Sheets
+                        if webhook_url:
+                            res = requests.post(webhook_url, json=data)
+                            if res.status_code == 200:
+                                st.success(f"✅ 辨識成功！資料已同步寫入你的 Google 表格！")
+                            else:
+                                st.warning(f"✅ 辨識成功，但寫入 Google 表格失敗，請稍後下載 CSV 手動補上。")
+                        else:
+                            st.success(f"✅ 辨識成功！(尚未設定 Google Sheets 同步)")
                     
             except Exception as e:
                 st.error(f"❌ 發生未知的錯誤：{e}")
