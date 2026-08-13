@@ -9,7 +9,7 @@ st.set_page_config(page_title="📦 寄貨單自動辨識工具", layout="center
 st.title("📦 寄貨單自動辨識工具")
 st.write("只要把包裹標籤的照片拖曳到下方，AI 就會自動幫你把資料整理成表格！")
 
-# 讓使用者輸入 API Key (也可以直接寫死在程式碼裡)
+# 讓使用者輸入 API Key
 api_key = st.text_input("請輸入你的 Gemini API Key (只需輸入一次):", type="password")
 
 if api_key:
@@ -22,7 +22,8 @@ if api_key:
     if uploaded_file is not None:
         # 顯示上傳的照片
         image = Image.open(uploaded_file)
-        st.image(image, caption="你上傳的包裹照片", use_column_width=True)
+        # 更新：使用最新的 use_container_width 參數
+        st.image(image, caption="你上傳的包裹照片", use_container_width=True)
 
         # 點擊按鈕開始辨識
         if st.button("🚀 開始自動提取資料"):
@@ -31,9 +32,9 @@ if api_key:
                     # 使用 Gemini 1.5 Flash 模型 (速度快、支援圖片)
                     model = genai.GenerativeModel('gemini-1.5-flash')
                     
-                    # 給 AI 的指令
+                    # 給 AI 的指令 (因為啟用了 JSON 模式，指令可以更簡潔)
                     prompt = """
-                    請幫我從這張物流標籤圖片中提取以下資訊，並嚴格以 JSON 格式回傳，不要包含任何 markdown 標記（如 ```json 等）：
+                    請從這張物流標籤圖片中提取以下資訊，並回傳指定的 JSON 格式：
                     {
                         "郵寄公司": "例如 DHL, Hermes",
                         "追蹤碼": "物流單號",
@@ -43,17 +44,14 @@ if api_key:
                     如果圖片中找不到某項資訊，請填寫 "未找到"。
                     """
                     
-                    # 呼叫 AI 進行辨識
-                    response = model.generate_content([prompt, image])
+                    # 更新：呼叫 AI 進行辨識，並透過設定強制要求回傳標準 JSON 格式
+                    response = model.generate_content(
+                        [prompt, image],
+                        generation_config={"response_mime_type": "application/json"}
+                    )
                     
-                    # 清理 AI 回傳的文字並轉成 JSON
-                    text = response.text.strip()
-                    if text.startswith("```json"):
-                        text = text[7:]
-                    if text.endswith("```"):
-                        text = text[:-3]
-                        
-                    data = json.loads(text.strip())
+                    # AI 現在保證會回傳純 JSON 格式，可直接解析
+                    data = json.loads(response.text)
                     
                     st.success("✅ 辨識完成！")
                     
@@ -67,7 +65,9 @@ if api_key:
                     
                     st.info("💡 提示：你可以直接選取上方的表格內容，按 Ctrl+C 複製，然後直接到 Google Sheets 貼上 (Ctrl+V) 即可！")
                     
+                except json.JSONDecodeError:
+                    st.error("❌ 解析失敗：AI 回傳的格式不正確，請再試一次。")
                 except Exception as e:
-                    st.error(f"❌ 解析失敗，請確認圖片是否清晰，或重新嘗試。錯誤訊息: {e}")
+                    st.error(f"❌ 發生錯誤，請確認圖片是否清晰，或檢查 API 狀態。錯誤訊息: {e}")
 else:
     st.warning("請先在上方輸入你的 Gemini API Key 才能開始使用喔！")
