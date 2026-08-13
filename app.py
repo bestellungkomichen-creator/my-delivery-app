@@ -26,25 +26,36 @@ if api_key:
 
         # 點擊按鈕開始辨識
         if st.button("🚀 開始自動提取資料"):
-            with st.spinner("系統正在自動尋找可用的 AI 模型並辨識圖片中，請稍候..."):
+            with st.spinner("系統正在設定最新的 AI 模型並辨識圖片中，請稍候..."):
                 try:
-                    # 1. 自動偵測你的 API Key 到底有權限使用哪些模型
+                    # 1. 取得你專屬的可用模型清單
                     available_models = [m.name for m in genai.list_models()]
                     
+                    # 2. 針對你截圖中擁有的最新模型進行配對 (優先抓最穩定的 2.5 或 3.5 flash)
                     target_model = None
-                    # 依序往下找，只要有其中一個就抓來用
-                    if 'models/gemini-1.5-flash' in available_models:
-                        target_model = 'gemini-1.5-flash'
-                    elif 'models/gemini-1.5-pro' in available_models:
-                        target_model = 'gemini-1.5-pro'
-                    elif 'models/gemini-pro-vision' in available_models:
-                        target_model = 'gemini-pro-vision'
+                    preferred_models = [
+                        'models/gemini-2.5-flash',
+                        'models/gemini-3.5-flash',
+                        'models/gemini-flash-latest',
+                        'models/gemini-2.5-pro'
+                    ]
                     
-                    # 如果連舊版模型都沒有權限
+                    for pm in preferred_models:
+                        if pm in available_models:
+                            target_model = pm.replace("models/", "")
+                            break
+                    
+                    # 萬一真的沒配對到，直接硬抓清單裡第一個名字有 flash 的模型
                     if target_model is None:
-                        st.error(f"❌ 你的 API Key 完全沒有圖片辨識的權限。你的鑰匙目前只能存取: {available_models}")
+                        for m in available_models:
+                            if 'flash' in m and 'preview' not in m and 'tts' not in m:
+                                target_model = m.replace("models/", "")
+                                break
+                                
+                    if target_model is None:
+                         st.error(f"❌ 找不到合適的圖片辨識模型，請確認 API 狀態。")
                     else:
-                        # 2. 啟動偵測到的可用模型
+                        # 3. 啟動配對到的最新模型
                         model = genai.GenerativeModel(target_model)
                         
                         # 給 AI 的指令
@@ -62,7 +73,7 @@ if api_key:
                         # 呼叫 AI
                         response = model.generate_content([prompt, image])
                         
-                        # 3. 手動清理文字格式 (為了相容舊版模型)
+                        # 處理 JSON 格式
                         text = response.text.strip()
                         if text.startswith("```json"):
                             text = text[7:]
@@ -73,7 +84,7 @@ if api_key:
                             
                         data = json.loads(text.strip())
                         
-                        st.success(f"✅ 辨識完成！(系統自動為你挑選了 {target_model} 模型)")
+                        st.success(f"✅ 辨識完成！(系統自動為你挑選了強大的 {target_model} 模型)")
                         
                         # 顯示成表格
                         df = pd.DataFrame([data])
@@ -84,6 +95,6 @@ if api_key:
                         st.info("💡 提示：你可以直接選取上方的表格內容，按 Ctrl+C 複製，然後直接到 Google Sheets 貼上 (Ctrl+V) 即可！")
                         
                 except Exception as e:
-                    st.error(f"❌ 發生未知的錯誤，請截圖這段文字：{e}")
+                    st.error(f"❌ 發生未知的錯誤：{e}")
 else:
     st.warning("請先在上方輸入你的 Gemini API Key 才能開始使用喔！")
