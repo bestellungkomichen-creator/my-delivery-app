@@ -31,13 +31,11 @@ if api_key:
                     # 1. 取得你專屬的可用模型清單
                     available_models = [m.name for m in genai.list_models()]
                     
-                    # 2. 針對你截圖中擁有的最新模型進行配對 (優先抓最穩定的 2.5 或 3.5 flash)
+                    # 2. 避開被鎖的 2.5，直接強制優先抓取 3.5 最新版
                     target_model = None
                     preferred_models = [
-                        'models/gemini-2.5-flash',
                         'models/gemini-3.5-flash',
-                        'models/gemini-flash-latest',
-                        'models/gemini-2.5-pro'
+                        'models/gemini-flash-latest'
                     ]
                     
                     for pm in preferred_models:
@@ -45,10 +43,10 @@ if api_key:
                             target_model = pm.replace("models/", "")
                             break
                     
-                    # 萬一真的沒配對到，直接硬抓清單裡第一個名字有 flash 的模型
+                    # 萬一真的沒配對到，直接硬抓清單裡第一個名字有 flash 且不是 2.5 的模型
                     if target_model is None:
                         for m in available_models:
-                            if 'flash' in m and 'preview' not in m and 'tts' not in m:
+                            if 'flash' in m and 'preview' not in m and 'tts' not in m and '2.5' not in m:
                                 target_model = m.replace("models/", "")
                                 break
                                 
@@ -84,7 +82,7 @@ if api_key:
                             
                         data = json.loads(text.strip())
                         
-                        st.success(f"✅ 辨識完成！(系統自動為你挑選了強大的 {target_model} 模型)")
+                        st.success(f"✅ 辨識完成！(系統自動為你跳級挑選了強大的 {target_model} 模型)")
                         
                         # 顯示成表格
                         df = pd.DataFrame([data])
