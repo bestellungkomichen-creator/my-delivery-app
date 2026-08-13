@@ -28,8 +28,8 @@ if api_key:
         if st.button("🚀 開始自動提取資料"):
             with st.spinner("AI 正在努力辨識圖片中，請稍候..."):
                 try:
-                    # 【修復重點】將模型名稱加上 -latest，確保雲端能正確讀取
-                    model = genai.GenerativeModel('gemini-1.5-flash-latest')
+                    # 【修復重點】將模型名稱切換到最穩定、最強大的 gemini-1.5-pro
+                    model = genai.GenerativeModel('gemini-1.5-pro')
                     
                     # 給 AI 的指令
                     prompt = """
@@ -56,6 +56,7 @@ if api_key:
                     
                     # 顯示成表格
                     df = pd.DataFrame([data])
+                    # 確保欄位順序正确
                     df = df[['郵寄公司', '追蹤碼', '寄貨人', '寄貨地址']]
                     
                     st.dataframe(df, use_container_width=True)
