@@ -3,20 +3,20 @@ import google.generativeai as genai
 from PIL import Image
 import json
 import pandas as pd
+import requests
 
 # 網頁標題與設定
-st.set_page_config(page_title="📦 寄貨單自動辨識工具 (極速版)", layout="centered")
+st.set_page_config(page_title="📦 寄貨單自動辨識工具 (雲端同步版)", layout="centered")
 st.title("📦 寄貨單自動辨識工具 ⚡")
-st.write("只要把包裹標籤的照片拖曳到下方，AI 就會自動提取資料並【累積成大表格】！")
+st.write("只要把包裹標籤的照片拖曳到下方，AI 就會自動提取資料並【即時同步至 Google Sheets】！")
 
 # 初始化暫存資料庫
 if 'scanned_data' not in st.session_state:
     st.session_state.scanned_data = pd.DataFrame(columns=['郵寄公司', '追蹤碼', '寄貨人', '寄貨地址'])
 
-# 自動尋找 API Key
-api_key = ""
-if "GEMINI_API_KEY" in st.secrets:
-    api_key = st.secrets["GEMINI_API_KEY"]
+# 自動尋找 API Key 與 Google Sheets 通道
+api_key = st.secrets.get("GEMINI_API_KEY", "")
+webhook_url = st.secrets.get("GSHEET_WEBHOOK_URL", "")
 
 if not api_key:
     api_key = st.text_input("請輸入你的 Gemini API Key:", type="password")
@@ -32,21 +32,14 @@ uploaded_file = st.file_uploader("拖曳或點擊上傳包裹照片 (上傳新�
 if uploaded_file is not None:
     # 顯示上傳的照片
     image = Image.open(uploaded_file)
-    
-    # ==========================================
-    # 【提速關鍵】自動壓縮圖片大小
-    # 將圖片最長邊限制在 1024 像素，大幅減少網路傳輸時間
-    # ==========================================
     max_size = 1024
     if max(image.size) > max_size:
-        # 使用 LANCZOS 演算法縮圖，保持文字清晰度
         image.thumbnail((max_size, max_size), Image.Resampling.LANCZOS)
-    
     st.image(image, caption="準備辨識的包裹照片", use_container_width=True)
 
     # 點擊按鈕開始辨識
     if st.button("🚀 開始自動提取資料"):
-        with st.spinner("⚡ 圖片已壓縮，AI 正在極速辨識中..."):
+        with st.spinner("⚡ 圖片已壓縮，AI 正在極速辨識並同步中..."):
             try:
                 available_models = [m.name for m in genai.list_models()]
                 target_model = None
@@ -90,12 +83,20 @@ if uploaded_file is not None:
                         
                     data = json.loads(text.strip())
                     
+                    # 1. 將新資料加入網頁畫面下方
                     new_row = pd.DataFrame([data])
                     new_row = new_row[['郵寄公司', '追蹤碼', '寄貨人', '寄貨地址']]
-                    
                     st.session_state.scanned_data = pd.concat([st.session_state.scanned_data, new_row], ignore_index=True)
                     
-                    st.success(f"✅ 辨識成功！已自動加入下方表格。")
+                    # 2. 將新資料即時發送到 Google Sheets！
+                    if webhook_url:
+                        res = requests.post(webhook_url, json=data)
+                        if res.status_code == 200:
+                            st.success(f"✅ 辨識成功！資料已同步寫入你的 Google 表格！")
+                        else:
+                            st.warning(f"✅ 辨識成功，但寫入 Google 表格失敗，請稍後下載 CSV 手動補上。")
+                    else:
+                        st.success(f"✅ 辨識成功！(尚未設定 Google Sheets 同步)")
                     
             except Exception as e:
                 st.error(f"❌ 發生未知的錯誤：{e}")
@@ -104,7 +105,7 @@ if uploaded_file is not None:
 # 下方區塊：顯示累積的資料庫
 # ==========================================
 st.divider() 
-st.subheader("📂 目前累積的包裹資料")
+st.subheader("📂 網頁暫存紀錄 (可作為備份)")
 
 if not st.session_state.scanned_data.empty:
     st.dataframe(st.session_state.scanned_data, use_container_width=True)
@@ -113,16 +114,16 @@ if not st.session_state.scanned_data.empty:
     with col1:
         csv_data = st.session_state.scanned_data.to_csv(index=False, encoding='utf-8-sig')
         st.download_button(
-            label="📥 下載成 CSV 檔案 (可直接用 Excel 開啟)",
+            label="📥 下載成 CSV 檔案 (備份用)",
             data=csv_data,
-            file_name="包裹資料累積.csv",
+            file_name="包裹資料備份.csv",
             mime="text/csv",
         )
     with col2:
-        if st.button("🗑️ 清空表格 (準備處理下一批)"):
+        if st.button("🗑️ 清空網頁畫面紀錄"):
             st.session_state.scanned_data = pd.DataFrame(columns=['郵寄公司', '追蹤碼', '寄貨人', '寄貨地址'])
             st.rerun()
             
-    st.info("💡 【提示】直接點擊上方照片右上角的『X』移除舊照片，丟下一張新照片進來辨識，資料就會自動累積！")
+    st.info("💡 【提示】資料現在會自動傳送到你的 Google 表格，下方的紀錄僅作為備份觀看用！")
 else:
     st.info("目前還沒有資料，請在上方上傳照片並開始辨識！")
