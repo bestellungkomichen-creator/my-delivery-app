@@ -30,14 +30,12 @@ genai.configure(api_key=api_key)
 uploaded_file = st.file_uploader("拖曳或點擊上傳包裹照片 (上傳新照片前，可按右上角 X 移除舊照片)", type=['jpg', 'jpeg', 'png'])
 
 if uploaded_file is not None:
-    # 顯示上傳的照片
     image = Image.open(uploaded_file)
     max_size = 1024
     if max(image.size) > max_size:
         image.thumbnail((max_size, max_size), Image.Resampling.LANCZOS)
     st.image(image, caption="準備辨識的包裹照片", use_container_width=True)
 
-    # 點擊按鈕開始辨識
     if st.button("🚀 開始自動提取資料"):
         with st.spinner("⚡ 圖片已壓縮，AI 正在極速辨識並同步中..."):
             try:
@@ -84,11 +82,18 @@ if uploaded_file is not None:
                     data = json.loads(text.strip())
                     
                     # ==========================================
-                    # 【新增防呆機制】檢查是不是無關的照片
-                    # 如果連最重要的「追蹤碼」和「郵寄公司」都找不到，就判定為無效照片
+                    # 【強化版防呆機制】
+                    # 把抓到的文字強制轉字串，並清掉所有隱形空白
                     # ==========================================
-                    if data.get("追蹤碼", "未找到") == "未找到" and data.get("郵寄公司", "未找到") == "未找到":
-                        st.warning("⚠️ 圖片中找不到任何物流單資訊。請確認這是一張清晰的包裹照片！(此筆無效資料已攔截，不會寫入表格)")
+                    tracking_val = str(data.get("追蹤碼", "")).strip()
+                    company_val = str(data.get("郵寄公司", "")).strip()
+                    
+                    # 只要內容包含「未找到」、或是完全空白，就判定為無效
+                    def is_invalid(val):
+                        return val == "" or "未找到" in val or val.lower() in ["none", "null", "not found"]
+
+                    if is_invalid(tracking_val) and is_invalid(company_val):
+                        st.warning("⚠️ 圖片中找不到有效的「追蹤碼」與「郵寄公司」，系統判定這不是一張包裹標籤！(資料已自動攔截，不會寫入表格)")
                     else:
                         # 通過檢查，將新資料加入網頁畫面下方
                         new_row = pd.DataFrame([data])
