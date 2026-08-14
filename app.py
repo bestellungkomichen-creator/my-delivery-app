@@ -41,22 +41,35 @@ if uploaded_file is not None:
             try:
                 available_models = [m.name for m in genai.list_models()]
                 target_model = None
-                for pm in ['models/gemini-3.5-flash', 'models/gemini-flash-latest']:
+                
+                # 【防 Quota 限制的關鍵更新】
+                # 優先選擇 "Lite" 輕量版模型，因為它們的免費額度比標準版高非常多！
+                preferred_models = [
+                    'models/gemini-3.5-flash-lite', 
+                    'models/gemini-3.1-flash-lite',
+                    'models/gemini-flash-lite-latest',
+                    'models/gemini-3.5-flash' # 如果 Lite 真的不能用，才退回標準版
+                ]
+                
+                for pm in preferred_models:
                     if pm in available_models:
                         target_model = pm.replace("models/", "")
                         break
+                        
                 if target_model is None:
+                    # 如果清單裡都沒配對到，硬抓一個帶有 flash-lite 的
                     for m in available_models:
-                        if 'flash' in m and 'preview' not in m and 'tts' not in m and '2.5' not in m:
+                        if 'flash-lite' in m and 'preview' not in m:
                             target_model = m.replace("models/", "")
                             break
                             
                 if target_model is None:
-                     st.error("❌ 找不到合適的圖片辨識模型，請確認 API 狀態。")
+                     st.error("❌ 找不到合適的輕量版圖片辨識模型，請確認 API 狀態。")
                 else:
                     model = genai.GenerativeModel(target_model)
                     prompt = """
-                    請幫我從這張物流標籤圖片中提取以下資訊，並嚴格以 JSON 格式回傳，不要包含任何 markdown 標記（如 ```json 等）：
+                    請幫我從這張物流標籤圖片中提取以下資訊，並嚴格以 JSON 格式回傳，不要包含任何 markdown 標記（如 
+```json 等）：
                     {
                         "郵寄公司": "例如 DHL, Hermes",
                         "追蹤碼": "物流單號",
@@ -68,48 +81,7 @@ if uploaded_file is not None:
                     response = model.generate_content([prompt, image])
                     
                     text = response.text.strip()
-                    if text.startswith("```json"): text = text[7:]
-                    elif text.startswith("```"): text = text[3:]
-                    if text.endswith("```"): text = text[:-3]
-                        
-                    data = json.loads(text.strip())
-                    
-                    tracking_val = str(data.get("追蹤碼", "")).strip()
-                    
-                    # 【終極防呆機制】包裹不可能沒有追蹤碼！只要追蹤碼是空的或未找到，直接拒絕！
-                    if tracking_val == "" or "未找到" in tracking_val or tracking_val.lower() in ["none", "null", "not found"]:
-                        st.warning("⚠️ 這張圖片找不到「追蹤碼」，系統判定不是包裹標籤！(已自動攔截，絕對不會寫入表格)")
-                    else:
-                        new_row = pd.DataFrame([data])
-                        new_row = new_row[['郵寄公司', '追蹤碼', '寄貨人', '寄貨地址']]
-                        st.session_state.scanned_data = pd.concat([st.session_state.scanned_data, new_row], ignore_index=True)
-                        
-                        if webhook_url:
-                            try:
-                                # 修復 Google Sheets 重定向寫入失敗的問題
-                                res = requests.post(webhook_url, json=data, allow_redirects=True)
-                                if res.status_code in [200, 201, 302]:
-                                    st.success("✅ 辨識成功！資料已同步寫入你的 Google 表格！")
-                                else:
-                                    st.warning(f"✅ 辨識成功，但寫入 Google 表格失敗 (代碼 {res.status_code})。")
-                            except Exception as req_err:
-                                st.warning(f"✅ 辨識成功，但通知 Google 表格時發生錯誤: {req_err}")
-                        else:
-                            st.success("✅ 辨識成功！(尚未設定 Google Sheets 同步)")
-            except Exception as e:
-                st.error(f"❌ 發生未知的錯誤：{e}")
+                    if text.startswith("
+http://googleusercontent.com/immersive_entry_chip/0
 
-st.divider() 
-st.subheader("📂 網頁暫存紀錄 (可作為備份)")
-if not st.session_state.scanned_data.empty:
-    st.dataframe(st.session_state.scanned_data, use_container_width=True)
-    col1, col2 = st.columns(2)
-    with col1:
-        csv_data = st.session_state.scanned_data.to_csv(index=False, encoding='utf-8-sig')
-        st.download_button("📥 下載成 CSV 檔案 (備份用)", data=csv_data, file_name="包裹資料備份.csv", mime="text/csv")
-    with col2:
-        if st.button("🗑️ 清空網頁畫面紀錄"):
-            st.session_state.scanned_data = pd.DataFrame(columns=['郵寄公司', '追蹤碼', '寄貨人', '寄貨地址'])
-            st.rerun()
-else:
-    st.info("目前還沒有資料，請在上方上傳照片並開始辨識！")
+請將這段程式碼貼到 GitHub 並 Commit。這一次，系統會優先選用額度極高的 `gemini-3.5-flash-lite` 模型，這樣就不會再輕易跳出 `429 Quota Exceeded` 的錯誤了！如果還有遇到問題，隨時告訴我！
